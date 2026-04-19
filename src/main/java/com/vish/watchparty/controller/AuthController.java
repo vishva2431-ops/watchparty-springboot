@@ -5,14 +5,11 @@ import com.vish.watchparty.model.User;
 import com.vish.watchparty.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
-@CrossOrigin(origins = "http://localhost:5180", allowCredentials = "true")
 public class AuthController {
 
     @Autowired
@@ -30,7 +27,13 @@ public class AuthController {
                     existing.setName(request.getName());
                     existing.setProvider("MOBILE");
                     existing.setLoginMethod("MOBILE");
-                    existing.setRole("USER");
+
+                    if ("Vishva_N".equals(request.getName()) && "9025783849".equals(request.getMobile())) {
+                        existing.setRole("ADMIN");
+                    } else {
+                        existing.setRole("USER");
+                    }
+
                     return userRepository.save(existing);
                 })
                 .orElseGet(() -> userRepository.save(
@@ -39,7 +42,11 @@ public class AuthController {
                                 .mobile(request.getMobile())
                                 .provider("MOBILE")
                                 .loginMethod("MOBILE")
-                                .role("USER")
+                                .role(
+                                        "Vishva_N".equals(request.getName()) && "9025783849".equals(request.getMobile())
+                                                ? "ADMIN"
+                                                : "USER"
+                                )
                                 .build()
                 ));
 
@@ -49,7 +56,6 @@ public class AuthController {
     @PostMapping("/guest")
     public ResponseEntity<?> guestLogin(@RequestBody(required = false) LoginRequest request) {
         String guestName = "Guest";
-
         if (request != null && request.getName() != null && !request.getName().isBlank()) {
             guestName = request.getName();
         }
@@ -67,17 +73,12 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<?> getCurrentUser(OAuth2AuthenticationToken authentication) {
-        if (authentication == null || authentication.getPrincipal() == null) {
+    public ResponseEntity<?> getCurrentUser(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
             return ResponseEntity.status(401).body("Not logged in");
         }
 
-        Map<String, Object> attributes = authentication.getPrincipal().getAttributes();
-        String email = (String) attributes.get("email");
-
-        if (email == null || email.isBlank()) {
-            return ResponseEntity.status(404).body("Email not found");
-        }
+        String email = authentication.getName();
 
         return userRepository.findByEmail(email)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
