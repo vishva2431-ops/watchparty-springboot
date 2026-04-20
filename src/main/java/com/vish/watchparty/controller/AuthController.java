@@ -8,8 +8,19 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+import java.util.Optional;
+
 @RestController
 @RequestMapping("/auth")
+@CrossOrigin(origins = {
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:5178",
+        "http://localhost:5180",
+        "https://watch-movies-together.netlify.app"
+})
 public class AuthController {
 
     @Autowired
@@ -17,76 +28,122 @@ public class AuthController {
 
     @PostMapping("/mobile-login")
     public ResponseEntity<?> mobileLogin(@RequestBody LoginRequest request) {
-        if (request.getName() == null || request.getName().isBlank()
-                || request.getMobile() == null || request.getMobile().isBlank()) {
-            return ResponseEntity.badRequest().body("Name and mobile are required");
-        }
-
-        User user = userRepository.findByMobile(request.getMobile())
-                .map(existing -> {
-                    existing.setName(request.getName());
-                    existing.setProvider("MOBILE");
-                    existing.setLoginMethod("MOBILE");
-
-                    if ("Vishva_N".equals(request.getName()) && "9025783849".equals(request.getMobile())) {
-                        existing.setRole("ADMIN");
-                    } else {
-                        existing.setRole("USER");
-                    }
-
-                    return userRepository.save(existing);
-                })
-                .orElseGet(() -> userRepository.save(
-                        User.builder()
-                                .name(request.getName())
-                                .mobile(request.getMobile())
-                                .provider("MOBILE")
-                                .loginMethod("MOBILE")
-                                .role(
-                                        "Vishva_N".equals(request.getName()) && "9025783849".equals(request.getMobile())
-                                                ? "ADMIN"
-                                                : "USER"
-                                )
-                                .build()
+        try {
+            if (request.getName() == null || request.getName().isBlank()
+                    || request.getMobile() == null || request.getMobile().isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Name and mobile are required"
                 ));
+            }
 
-        return ResponseEntity.ok(user);
+            Optional<User> existingUser = userRepository.findByMobile(request.getMobile());
+
+            User user;
+
+            if (existingUser.isPresent()) {
+                user = existingUser.get();
+                user.setName(request.getName().trim());
+            } else {
+                user = User.builder()
+                        .name(request.getName().trim())
+                        .mobile(request.getMobile().trim())
+                        .provider("MOBILE")
+                        .loginMethod("MOBILE")
+                        .build();
+            }
+
+            if ("Vishva_N".equals(request.getName().trim()) &&
+                    "9025783849".equals(request.getMobile().trim())) {
+                user.setRole("ADMIN");
+            } else {
+                user.setRole("USER");
+            }
+
+            user.setProvider("MOBILE");
+            user.setLoginMethod("MOBILE");
+
+            userRepository.save(user);
+
+            return ResponseEntity.ok(user);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of(
+                    "error", "Mobile login failed",
+                    "details", e.getMessage()
+            ));
+        }
     }
 
     @PostMapping("/guest")
     public ResponseEntity<?> guestLogin(@RequestBody(required = false) LoginRequest request) {
-        String guestName = "Guest";
-        if (request != null && request.getName() != null && !request.getName().isBlank()) {
-            guestName = request.getName();
+        try {
+            String guestName = "Guest";
+
+            if (request != null && request.getName() != null && !request.getName().isBlank()) {
+                guestName = request.getName().trim();
+            }
+
+            User guest = User.builder()
+                    .name(guestName)
+                    .provider("GUEST")
+                    .loginMethod("GUEST")
+                    .role("USER")
+                    .build();
+
+            userRepository.save(guest);
+
+            return ResponseEntity.ok(guest);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of(
+                    "error", "Guest login failed",
+                    "details", e.getMessage()
+            ));
         }
-
-        User guest = userRepository.save(
-                User.builder()
-                        .name(guestName)
-                        .provider("GUEST")
-                        .loginMethod("GUEST")
-                        .role("USER")
-                        .build()
-        );
-
-        return ResponseEntity.ok(guest);
     }
 
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null) {
-            return ResponseEntity.status(401).body("Not logged in");
+        try {
+            if (authentication == null || authentication.getName() == null) {
+                return ResponseEntity.status(401).body(Map.of(
+                        "error", "Not logged in"
+                ));
+            }
+
+            String email = authentication.getName();
+
+            Optional<User> user = userRepository.findByEmail(email);
+
+            if (user.isPresent()) {
+                return ResponseEntity.ok(user.get());
+            } else {
+                return ResponseEntity.status(404).body(Map.of(
+                        "error", "User not found"
+                ));
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of(
+                    "error", "Failed to fetch current user",
+                    "details", e.getMessage()
+            ));
         }
-
-        String email = authentication.getName();
-
-        return userRepository.findByEmail(email)
-                .<ResponseEntity<?>>map(ResponseEntity::ok)
-                .orElse(ResponseEntity.status(404).body("User not found"));
     }
 
     @GetMapping("/users")
     public ResponseEntity<?> getAllUsers() {
-        return ResponseEntity.ok(userRepository.findAll());
+        try {
+            return ResponseEntity.ok(userRepository.findAll());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of(
+                    "error", "Failed to fetch users",
+                    "details", e.getMessage()
+            ));
+        }
     }
 }
