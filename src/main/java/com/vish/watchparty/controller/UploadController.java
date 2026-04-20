@@ -7,6 +7,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+@CrossOrigin(
+        origins = {
+                "http://localhost:5173",
+                "https://watch-movies-together.netlify.app"
+        },
+        allowCredentials = "true"
+)
 @RestController
 @RequestMapping("/admin")
 public class UploadController {
