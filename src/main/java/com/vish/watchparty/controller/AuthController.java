@@ -91,6 +91,8 @@ public class AuthController {
                     .role("USER")
                     .build();
 
+            guest.setMobile(null);
+
             userRepository.save(guest);
 
             return ResponseEntity.ok(guest);
