@@ -1,23 +1,28 @@
 package com.vish.watchparty.controller;
 
+import com.vish.watchparty.dto.RoomCreateRequest;
+import com.vish.watchparty.dto.RoomMovieUpdateRequest;
 import com.vish.watchparty.model.Movie;
 import com.vish.watchparty.model.Room;
 import com.vish.watchparty.repository.MovieRepository;
 import com.vish.watchparty.repository.RoomRepository;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 
 @RestController
 @RequestMapping("/rooms")
-@CrossOrigin(origins = "*")
 public class RoomController {
 
     private final RoomRepository roomRepository;
     private final MovieRepository movieRepository;
+    private final Random random = new Random();
 
     public RoomController(RoomRepository roomRepository, MovieRepository movieRepository) {
         this.roomRepository = roomRepository;
@@ -25,84 +30,63 @@ public class RoomController {
     }
 
     @PostMapping("/create")
-    public ResponseEntity<?> createRoom(@RequestBody(required = false) Map<String, String> payload) {
-        String movieId = null;
+    public Map<String, Object> createRoom(@RequestBody(required = false) RoomCreateRequest request) {
+        Room room = new Room();
+        room.setRoomCode(generateRoomCode());
+        room.setCreatedBy(request != null && request.getUserName() != null ? request.getUserName().trim() : "Guest");
+        room.setMovieId(request != null ? request.getMovieId() : null);
+        room.setCreatedAt(Instant.now());
 
-        if (payload != null) {
-            movieId = payload.get("movieId");
-        }
-
-        if (movieId != null && !movieId.isBlank()) {
-            Optional<Movie> movieOptional = movieRepository.findById(movieId);
-            if (movieOptional.isEmpty()) {
-                return ResponseEntity.badRequest().body("Movie not found");
-            }
-        }
-
-        String roomCode = generateUniqueRoomCode();
-
-        Room room = Room.builder()
-                .roomCode(roomCode)
-                .movieId(movieId)
-                .currentTime(0.0)
-                .playing(false)
-                .playbackRate(1.0)
-                .currentQuality("AUTO")
-                .build();
-
-        roomRepository.save(room);
-
-        return ResponseEntity.ok(room);
+        Room savedRoom = roomRepository.save(room);
+        return toResponse(savedRoom);
     }
 
     @GetMapping("/{roomCode}")
-    public ResponseEntity<?> getRoom(@PathVariable String roomCode) {
-        return roomRepository.findByRoomCode(roomCode)
-                .map(room -> {
-                    Movie movie = null;
-                    if (room.getMovieId() != null) {
-                        movie = movieRepository.findById(room.getMovieId()).orElse(null);
-                    }
-
-                    return ResponseEntity.ok(Map.of(
-                            "roomCode", room.getRoomCode(),
-                            "movie", movie == null ? "" : movie,
-                            "currentTime", room.getCurrentTime() == null ? 0.0 : room.getCurrentTime(),
-                            "playing", room.getPlaying() == null ? false : room.getPlaying(),
-                            "playbackRate", room.getPlaybackRate() == null ? 1.0 : room.getPlaybackRate(),
-                            "currentQuality", room.getCurrentQuality() == null ? "AUTO" : room.getCurrentQuality()
-                    ));
-                })
-                .orElse(ResponseEntity.notFound().build());
+    public Map<String, Object> getRoom(@PathVariable String roomCode) {
+        Room room = roomRepository.findByRoomCodeIgnoreCase(roomCode)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Room not found"));
+        return toResponse(room);
     }
 
     @PutMapping("/{roomCode}/movie")
-    public ResponseEntity<?> updateRoomMovie(@PathVariable String roomCode,
-                                             @RequestBody Map<String, String> payload) {
-        String movieId = payload.get("movieId");
+    public Map<String, Object> updateRoomMovie(@PathVariable String roomCode,
+                                               @RequestBody RoomMovieUpdateRequest request) {
+        Room room = roomRepository.findByRoomCodeIgnoreCase(roomCode)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Room not found"));
+        room.setMovieId(request.getMovieId());
 
-        return roomRepository.findByRoomCode(roomCode)
-                .map(room -> {
-                    room.setMovieId(movieId);
-                    roomRepository.save(room);
-                    return ResponseEntity.ok(room);
-                })
-                .orElse(ResponseEntity.notFound().build());
+        Room updatedRoom = roomRepository.save(room);
+        return toResponse(updatedRoom);
     }
 
-    private String generateUniqueRoomCode() {
-        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        Random random = new Random();
+    private Map<String, Object> toResponse(Room room) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", room.getId());
+        response.put("roomCode", room.getRoomCode());
+        response.put("createdBy", room.getCreatedBy());
+        response.put("currentQuality", room.getCurrentQuality());
+        response.put("createdAt", room.getCreatedAt());
+
+        if (room.getMovieId() != null && !room.getMovieId().isBlank()) {
+            Optional<Movie> movie = movieRepository.findById(room.getMovieId());
+            response.put("movie", movie.orElse(null));
+        } else {
+            response.put("movie", null);
+        }
+
+        return response;
+    }
+
+    private String generateRoomCode() {
+        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         String code;
-
         do {
-            StringBuilder sb = new StringBuilder();
+            StringBuilder builder = new StringBuilder();
             for (int i = 0; i < 6; i++) {
-                sb.append(chars.charAt(random.nextInt(chars.length())));
+                builder.append(chars.charAt(random.nextInt(chars.length())));
             }
-            code = sb.toString();
-        } while (roomRepository.findByRoomCode(code).isPresent());
-
+            code = builder.toString();
+        } while (roomRepository.existsByRoomCodeIgnoreCase(code));
         return code;
     }
 }

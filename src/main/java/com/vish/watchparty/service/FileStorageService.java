@@ -1,49 +1,46 @@
 package com.vish.watchparty.service;
 
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.*;
-import java.util.UUID;
+import java.io.IOException;
+import java.util.Map;
 
 @Service
 public class FileStorageService {
 
-    private final String uploadDir = "uploads/";
+    private final Cloudinary cloudinary;
 
-    public String saveFile(MultipartFile file) {
-        try {
-            if (file == null || file.isEmpty()) {
-                throw new RuntimeException("File is empty");
-            }
+    public FileStorageService() {
+        this.cloudinary = new Cloudinary(ObjectUtils.asMap(
+                "cloud_name", System.getenv("CLOUDINARY_CLOUD_NAME"),
+                "api_key", System.getenv("CLOUDINARY_API_KEY"),
+                "api_secret", System.getenv("CLOUDINARY_API_SECRET")
+        ));
+    }
 
-            File folder = new File(uploadDir);
-            if (!folder.exists()) {
-                folder.mkdirs();
-            }
+    public String savePoster(MultipartFile file) throws IOException {
+        Map upload = cloudinary.uploader().upload(
+                file.getBytes(),
+                ObjectUtils.asMap("resource_type", "image")
+        );
+        return upload.get("secure_url").toString();
+    }
 
-            String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
-            File destination = new File(uploadDir + fileName);
+    public String saveVideo(MultipartFile file) throws IOException {
+        Map upload = cloudinary.uploader().uploadLarge(
+                file.getBytes(),
+                ObjectUtils.asMap("resource_type", "video")
+        );
+        return upload.get("secure_url").toString();
+    }
 
-            // 🔥 STREAMING FIX (IMPORTANT for large files)
-            try (InputStream inputStream = file.getInputStream();
-                 OutputStream outputStream = new FileOutputStream(destination)) {
-
-                byte[] buffer = new byte[8192]; // 8KB chunks
-                int bytesRead;
-
-                while ((bytesRead = inputStream.read(buffer)) != -1) {
-                    outputStream.write(buffer, 0, bytesRead);
-                }
-            }
-
-            System.out.println("File saved successfully: " + fileName);
-
-            return fileName;
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("File upload failed: " + e.getMessage());
-        }
+    public void delete(String publicId, String resourceType) throws IOException {
+        cloudinary.uploader().destroy(
+                publicId,
+                ObjectUtils.asMap("resource_type", resourceType)
+        );
     }
 }

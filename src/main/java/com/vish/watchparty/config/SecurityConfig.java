@@ -14,23 +14,10 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                .cors(cors -> {})
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/",
-                                "/error",
-                                "/auth/**",
-                                "/movies/**",
-                                "/rooms/**",
-                                "/admin/**",
-                                "/uploads/**",
-                                "/ws/**"
-                        ).permitAll()
-                        .anyRequest().authenticated()
-                )
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                 .formLogin(form -> form.disable())
-                .httpBasic(basic -> basic.disable());
-
+                .httpBasic(basic -> basic.disable())
+                .oauth2Login(oauth2 -> oauth2.disable());
         return http.build();
     }
 }
