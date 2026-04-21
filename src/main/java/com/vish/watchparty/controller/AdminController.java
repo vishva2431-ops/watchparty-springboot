@@ -2,63 +2,50 @@ package com.vish.watchparty.controller;
 
 import com.vish.watchparty.model.Movie;
 import com.vish.watchparty.repository.MovieRepository;
-import com.vish.watchparty.service.FileStorageService;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.ResponseStatusException;
 
-import java.io.IOException;
 import java.time.Instant;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/admin")
 public class AdminController {
 
     private final MovieRepository movieRepository;
-    private final FileStorageService fileStorageService;
 
-    public AdminController(MovieRepository movieRepository, FileStorageService fileStorageService) {
+    public AdminController(MovieRepository movieRepository) {
         this.movieRepository = movieRepository;
-        this.fileStorageService = fileStorageService;
     }
 
-    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Movie uploadMovie(
-            @RequestParam("groupTitle") String groupTitle,
-            @RequestParam(value = "partTitle", required = false) String partTitle,
-            @RequestParam(value = "partNumber", required = false) String partNumber,
-            @RequestParam("description") String description,
-            @RequestParam("poster") MultipartFile poster,
-            @RequestParam("video") MultipartFile video
-    ) throws IOException {
-        if (groupTitle == null || groupTitle.isBlank() || description == null || description.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Group title and description are required");
-        }
-        if (poster == null || poster.isEmpty() || video == null || video.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Poster and video are required");
-        }
-
+    @PostMapping("/save-movie")
+    public ResponseEntity<?> saveMovie(@RequestBody Map<String, Object> payload) {
         Movie movie = new Movie();
-        movie.setGroupTitle(groupTitle.trim());
-        movie.setPartTitle(partTitle == null || partTitle.isBlank() ? groupTitle.trim() : partTitle.trim());
-        movie.setPartNumber(parsePartNumber(partNumber));
-        movie.setDescription(description.trim());
-        movie.setPosterUrl(fileStorageService.savePoster(poster));
-        movie.setVideoUrl(fileStorageService.saveVideo(video));
+
+        movie.setGroupTitle(getString(payload.get("groupTitle")));
+        movie.setPartTitle(getString(payload.get("partTitle")));
+        movie.setPartNumber(parsePartNumber(payload.get("partNumber")));
+        movie.setDescription(getString(payload.get("description")));
+        movie.setPosterUrl(getString(payload.get("posterUrl")));
+        movie.setVideoUrl(getString(payload.get("videoUrl")));
         movie.setCreatedAt(Instant.now());
 
-        return movieRepository.save(movie);
+        movieRepository.save(movie);
+        return ResponseEntity.ok(movie);
     }
 
-    private Integer parsePartNumber(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
+    private String getString(Object value) {
+        return value == null ? "" : value.toString().trim();
+    }
+
+    private Integer parsePartNumber(Object value) {
+        if (value == null) return null;
+        String text = value.toString().trim();
+        if (text.isBlank()) return null;
+
         try {
-            return Integer.parseInt(value.trim());
-        } catch (NumberFormatException ex) {
+            return Integer.parseInt(text);
+        } catch (NumberFormatException e) {
             return null;
         }
     }
